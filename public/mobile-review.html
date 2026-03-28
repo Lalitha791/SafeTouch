@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mobile Security Review</title>
+    <link rel="icon" href="data:,">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0B132B;
+            --panel-border: rgba(74, 144, 226, 0.3);
+            --safe-color: #00FA9A;
+            --alert-color: #FF3366;
+            --ui-blue: #4A90E2;
+            --font-head: 'Rajdhani', sans-serif;
+            --font-body: 'Fira Code', monospace;
+            --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        body {
+            margin: 0;
+            padding: 15px;
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at 50% 0%, rgba(74, 144, 226, 0.08), transparent 50%);
+            color: #ffffff;
+            font-family: var(--font-body);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        h1 {
+            font-family: var(--font-head);
+            color: var(--ui-blue);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            border-bottom: 1px solid var(--panel-border);
+            padding-bottom: 8px;
+            text-shadow: 0 0 10px rgba(74, 144, 226, 0.3);
+            text-align: center;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .request-card {
+            background: linear-gradient(180deg, rgba(11, 19, 43, 0.95) 0%, rgba(5, 10, 24, 0.95) 100%); 
+            border: 1px solid var(--panel-border); 
+            border-radius: 8px; 
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+            width: 100%;
+            max-width: 400px;
+            box-sizing: border-box;
+        }
+        
+        .request-card img { 
+            width: 100%; height: auto; object-fit: cover; 
+            border-radius: 4px; margin-bottom: 15px; background: #000; 
+            border: 1px solid #222;
+        }
+        .request-data { font-size: 0.9rem; color: #a0aec0; margin-bottom: 20px; line-height: 1.5; }
+        .request-data div { display: flex; justify-content: space-between; margin-bottom: 8px; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 4px;}
+        .request-data span.data-value { color: #fff; font-weight: 500; text-align: right; max-width: 60%; word-break: break-word;}
+        
+        .btn-group { display: flex; flex-direction: column; gap: 12px; }
+        button { 
+            width: 100%; padding: 15px; font-family: var(--font-head); font-size: 1.1rem;
+            font-weight: 700; cursor: pointer; text-transform: uppercase; 
+            border: none; border-radius: 4px; transition: var(--transition);
+            letter-spacing: 1px;
+        }
+        .btn-allow { 
+            background: rgba(0, 250, 154, 0.15); color: var(--safe-color); border: 1px solid var(--safe-color);
+        }
+        .btn-allow:active { background: var(--safe-color); color: #000; }
+        
+        .btn-deny { 
+            background: rgba(255, 51, 102, 0.15); color: var(--alert-color); border: 1px solid var(--alert-color);
+        }
+        .btn-deny:active { background: var(--alert-color); color: #fff; }
+
+        #status-msg { margin-top: 20px; font-size: 1.1rem; text-align: center; display: none; }
+    </style>
+</head>
+<body>
+
+    <h1>SECURE TOUCH<br><span style="font-size: 1rem; color: #a0aec0">Mobile Review</span></h1>
+    
+    <div id="loading">Loading request data...</div>
+    
+    <div class="request-card" id="card" style="display: none;">
+        <img id="req-img" src="" alt="Snapshot">
+        <div class="request-data">
+            <div><span>User ID:</span> <span class="data-value" id="req-userid"></span></div>
+            <div><span>Socket ID:</span> <span class="data-value" id="req-socketid"></span></div>
+            <div><span>Time:</span> <span class="data-value" id="req-time"></span></div>
+            <div><span>GPS:</span> <span class="data-value" id="req-gps"></span></div>
+        </div>
+        <div class="btn-group">
+            <button class="btn-allow" onclick="makeDecision('Allow')">ALLOW ACCESS</button>
+            <button class="btn-deny" onclick="makeDecision('Deny')">DENY ACCESS</button>
+        </div>
+    </div>
+    
+    <div id="status-msg"></div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const socketId = urlParams.get('id');
+
+        if (!socketId) {
+            document.getElementById('loading').innerText = "Invalid Link: No session ID provided.";
+        } else {
+            fetch(`/api/pending-request/${socketId}`)
+                .then(res => {
+                    if(!res.ok) throw new Error("Not found");
+                    return res.json();
+                })
+                .then(data => {
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('card').style.display = 'block';
+                    
+                    document.getElementById('req-img').src = data.photo || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text x="10" y="50" fill="gray">No Image</text></svg>';
+                    document.getElementById('req-userid').innerText = data.userid || 'Unknown';
+                    document.getElementById('req-socketid').innerText = data.id;
+                    document.getElementById('req-time').innerText = new Date(data.timestamp).toLocaleTimeString();
+                    
+                    if (data.location && data.location.lat) {
+                        document.getElementById('req-gps').innerHTML = `<a href="https://www.google.com/maps?q=${data.location.lat},${data.location.lng}" target="_blank" style="color:var(--safe-color);">View Map</a>`;
+                    } else {
+                        document.getElementById('req-gps').innerText = "N/A";
+                    }
+                })
+                .catch(err => {
+                    document.getElementById('loading').innerText = "Request already processed or expired.";
+                });
+        }
+
+        function makeDecision(decision) {
+            fetch('/api/admin-decision', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targetSocketId: socketId, decision: decision })
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('card').style.display = 'none';
+                const status = document.getElementById('status-msg');
+                status.style.display = 'block';
+                if (decision === 'Allow') {
+                    status.style.color = "var(--safe-color)";
+                    status.innerText = "✅ Session Successfully Authorized.";
+                } else {
+                    status.style.color = "var(--alert-color)";
+                    status.innerText = "⛔ Session Denied and Locked Out.";
+                }
+            })
+            .catch(err => alert("Error making decision"));
+        }
+    </script>
+</body>
+</html>

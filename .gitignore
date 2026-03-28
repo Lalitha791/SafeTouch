@@ -1,0 +1,7 @@
+node_modules/
+.env
+logs.db
+src/logs.db
+/tmp/logs.db
+.DS_Store
+*.log

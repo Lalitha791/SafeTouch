@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SECURE TOUCH</title>
+    <link rel="icon" href="data:,">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        :root {
+            --bg-color: #0B132B;
+            --safe-color: #00FA9A;
+            --alert-color: #FF3366;
+            --ui-blue: #4A90E2;
+            --font-head: 'Rajdhani', sans-serif;
+            --font-body: 'Fira Code', monospace;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            color: #ffffff;
+            font-family: var(--font-body);
+            overflow: hidden;
+        }
+
+        /* 1. Login Screen */
+        #login-screen {
+            display: flex;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 10000;
+            background: var(--bg-color);
+            align-items: center;
+            justify-content: center;
+        }
+
+        #login-screen.hidden {
+            display: none;
+        }
+
+        .login-box {
+            background: rgba(74, 144, 226, 0.05);
+            border: 1px solid var(--ui-blue);
+            padding: 40px;
+            border-radius: 8px;
+            width: 300px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+
+        .login-box h1 {
+            font-family: var(--font-head);
+            color: var(--ui-blue);
+            margin-top: 0;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+
+        .login-box input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            background: #050a17;
+            border: 1px solid var(--ui-blue);
+            color: var(--safe-color);
+            font-family: var(--font-body);
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .login-box input:focus {
+            outline: none;
+            box-shadow: 0 0 10px rgba(74, 144, 226, 0.5);
+        }
+
+        .login-box button {
+            width: 100%;
+            padding: 12px;
+            background: var(--ui-blue);
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-family: var(--font-head);
+            font-size: 1.1rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        .login-box button:hover {
+            background: #3a7bc2;
+        }
+
+        .error-msg {
+            color: var(--alert-color);
+            margin-top: 15px;
+            font-size: 0.85rem;
+            display: none;
+        }
+        
+        .error-msg.visible {
+            display: block;
+        }
+
+        /* 2. Main App Content */
+        #main-app {
+            padding: 40px;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            filter: blur(20px);
+            transition: filter 0.8s ease-in-out;
+            pointer-events: none;
+        }
+
+        #main-app.active {
+            display: flex;
+        }
+
+        #main-app h1 {
+            font-family: var(--font-head);
+            color: var(--ui-blue);
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+
+        /* Desktop Application Styles */
+        .desktop-icon {
+            text-align: center;
+            width: 120px;
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+
+        .desktop-icon:hover {
+            background: rgba(74, 144, 226, 0.2);
+            border: 1px solid var(--ui-blue);
+        }
+
+        .icon-img { display: block; margin-bottom: 5px; text-shadow: 0px 4px 10px rgba(0,0,0,0.5); }
+        .icon-label { font-size: 0.85rem; word-wrap: break-word; line-height: 1.2; text-shadow: 1px 1px 2px #000; }
+
+        /* 3. The Intercept Overlay (Awaiting Admin) */
+        #intercept-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 9999;
+            background: rgba(11, 19, 43, 0.8);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 1;
+            transition: opacity 0.5s ease;
+        }
+
+        #intercept-overlay.active {
+            display: flex;
+        }
+
+        #intercept-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(74, 144, 226, 0.2);
+            border-top-color: var(--ui-blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 30px;
+        }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        .status-message {
+            font-family: var(--font-head);
+            font-size: 2rem;
+            letter-spacing: 2px;
+            color: var(--ui-blue);
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .status-sub {
+            color: #888;
+            font-size: 1rem;
+            text-align: center;
+        }
+
+        /* 4. Access Denied Screen */
+        .access-denied-screen {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--bg-color);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: var(--alert-color);
+        }
+        
+        .access-denied-screen.active {
+            display: flex;
+        }
+
+        .access-denied-screen h1 {
+            font-family: var(--font-head);
+            font-size: 4rem;
+            margin-bottom: 0;
+            text-transform: uppercase;
+        }
+        .access-denied-screen p {
+            font-size: 1.2rem;
+        }
+
+        /* 5. Ransomware Screen */
+        .ransomware-screen {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255, 51, 102, 0.9);
+            z-index: 10005;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: #ffffff;
+            backdrop-filter: blur(15px);
+        }
+
+        .ransomware-screen.active {
+            display: flex;
+        }
+
+        .ransomware-screen h1 {
+            font-family: var(--font-head);
+            font-size: 3.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 0px #000;
+        }
+
+        .ransomware-box {
+            background: #000;
+            border: 2px solid var(--alert-color);
+            padding: 30px;
+            text-align: center;
+            border-radius: 8px;
+            max-width: 600px;
+            box-shadow: 0 0 30px rgba(255, 51, 102, 0.8);
+        }
+
+        .ransomware-box p {
+            font-size: 1.2rem;
+            line-height: 1.5;
+        }
+
+        .glitch {
+            animation: glitch 1s linear infinite;
+        }
+
+        @keyframes glitch {
+            2%, 64% { transform: translate(2px,0) skew(0deg); }
+            4%, 60% { transform: translate(-2px,0) skew(0deg); }
+            62% { transform: translate(0,0) skew(5deg); }
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- 1. Initial Login Screen -->
+    <div id="login-screen">
+        <form class="login-box" onsubmit="event.preventDefault();">
+            <h1>SECURE TOUCH Login</h1>
+            <input type="text" id="userid" placeholder="User ID" autocomplete="username">
+            <input type="password" id="password" placeholder="Password" autocomplete="current-password">
+            <button id="login-btn" type="button">Authenticate</button>
+            <div id="login-error" class="error-msg">Invalid credentials or system error.</div>
+            <a href="/admin.html" target="_blank" style="color: var(--ui-blue); font-size: 0.85rem; text-decoration: none; margin-top: 25px; display: inline-block; font-family: var(--font-head); letter-spacing: 1px;">LAUNCH ADMIN DASHBOARD</a>
+        </form>
+    </div>
+
+    <!-- 2. Main Application Desktop Area -->
+    <div id="main-app">
+        <!-- System Topbar -->
+        <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background: rgba(0,0,0,0.5); border-bottom: 1px solid var(--ui-blue); position: absolute; top: 0; box-sizing: border-box;">
+            <div style="font-family: var(--font-head); color: var(--ui-blue); font-weight: bold;">BEHAVIOURAL BIOMETRICS</div>
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <div id="system-clock" style="color: var(--safe-color);">--:--</div>
+                <button onclick="logout()" style="background: rgba(255, 51, 102, 0.1); color: var(--alert-color); border: 1px solid var(--alert-color); padding: 5px 15px; border-radius: 4px; cursor: pointer; font-family: var(--font-head); font-weight: bold; text-transform: uppercase; transition: all 0.2s;">Logout</button>
+            </div>
+        </div>
+        
+        <!-- Desktop Grid -->
+        <div class="desktop-grid" style="display: flex; gap: 30px; padding-top: 80px; width: 100%; max-width: 1200px; flex-wrap: wrap; margin-left: 50px;">
+            <!-- Work/Professional Files -->
+            <div class="desktop-icon" onclick="openFile('Sprint_Planning_Agile.docx')">
+                <div class="icon-img" style="font-size: 3rem;">📄</div>
+                <div class="icon-label">Sprint_Planning_Agile.docx</div>
+            </div>
+            <div class="desktop-icon" onclick="openFile('Design_Assets_v4.zip')">
+                <div class="icon-img" style="font-size: 3rem;">🗂️</div>
+                <div class="icon-label">Design_Assets_v4.zip</div>
+            </div>
+            <div class="desktop-icon" onclick="openFile('Meeting_Notes_Oct.txt')">
+                <div class="icon-img" style="font-size: 3rem;">📝</div>
+                <div class="icon-label">Meeting_Notes_Oct.txt</div>
+            </div>
+            <div class="desktop-icon" onclick="promptFilePassword('Client_Contracts_2026.pdf')">
+                <div class="icon-img" style="font-size: 3rem;">🔐</div>
+                <div class="icon-label">Client_Contracts_2026.pdf<br>(Encrypted)</div>
+            </div>
+            <div class="desktop-icon" onclick="promptFilePassword('Financial_Q4_2026.xlsx')">
+                <div class="icon-img" style="font-size: 3rem;">📊</div>
+                <div class="icon-label">Q4_Financials.xlsx<br>(Confidential)</div>
+            </div>
+            
+            <!-- Student/Academic Files -->
+            <div class="desktop-icon" onclick="openFile('CS401_Final_Project.cpp')">
+                <div class="icon-img" style="font-size: 3rem;">💻</div>
+                <div class="icon-label">CS401_Final_Project.cpp</div>
+            </div>
+            <div class="desktop-icon" onclick="openFile('Research_Draft_V2.pdf')">
+                <div class="icon-img" style="font-size: 3rem;">🎓</div>
+                <div class="icon-label">Research_Draft_V2.pdf</div>
+            </div>
+            <div class="desktop-icon" onclick="openFile('Study_Schedule_Fall.xlsx')">
+                <div class="icon-img" style="font-size: 3rem;">📅</div>
+                <div class="icon-label">Study_Schedule_Fall.xlsx</div>
+            </div>
+
+            <!-- Suspicious / Trigger Files -->
+            <div class="desktop-icon" onclick="openSearchApp()">
+                <div class="icon-img" style="font-size: 3rem;">🔍</div>
+                <div class="icon-label">System Search</div>
+            </div>
+
+            <!-- Settings / Utilities -->
+            <div class="desktop-icon" onclick="openSettings()">
+                <div class="icon-img" style="font-size: 3rem;">⚙️</div>
+                <div class="icon-label">System Settings</div>
+            </div>
+
+            <!-- Honeytraps (Triggers silent alarm / lockout immediately) -->
+            <div class="desktop-icon" onclick="triggerHoneytrap('Saved_Passwords.txt')">
+                <div class="icon-img" style="font-size: 3rem;">🔑</div>
+                <div class="icon-label">Saved_Passwords.txt<br><span style="color:var(--safe-color); font-size: 0.7rem;">(Personal)</span></div>
+            </div>
+            <div class="desktop-icon" onclick="triggerHoneytrap('Admin_Bypass_Scripts.zip')">
+                <div class="icon-img" style="font-size: 3rem;">☢️</div>
+                <div class="icon-label">Admin_Bypass_Scripts.zip</div>
+            </div>
+            <div class="desktop-icon" onclick="triggerHoneytrap('BitCoin_Wallet_Seed.txt')">
+                <div class="icon-img" style="font-size: 3rem;">💰</div>
+                <div class="icon-label">BitCoin_Wallet_Seed.txt</div>
+            </div>
+            <div class="desktop-icon" onclick="triggerHoneytrap('Top_Secret_Corporate_Data.pdf')">
+                <div class="icon-img" style="font-size: 3rem;">⚠️</div>
+                <div class="icon-label">Top_Secret_Corporate_Data.pdf</div>
+            </div>
+            
+        </div>
+
+        <!-- File Password Prompt Modal -->
+        <div id="file-password-modal" style="display:none; position: fixed; top: 30%; left: 50%; transform: translateX(-50%); background: var(--bg-color); border: 1px solid var(--ui-blue); padding: 30px; border-radius: 8px; z-index: 1000; box-shadow: 0 0 20px rgba(0,0,0,0.8); text-align: center;">
+            <h3 style="color: var(--alert-color); font-family: var(--font-head); margin-top:0;">RESTRICTED ACCESS</h3>
+            <p>Enter decryption key for: <span id="target-file-name" style="color:var(--ui-blue);"></span></p>
+            <input type="password" id="file-decryption-key" style="padding: 10px; width: 80%; margin-bottom: 15px; background: #000; color: #fff; border: 1px solid var(--ui-blue);">
+            <div><button id="verify-file-btn" style="padding: 10px 20px; background: var(--ui-blue); color: #fff; border: none; cursor: pointer;">Decrypt</button></div>
+            <p id="file-error-msg" style="color: var(--alert-color); font-size: 0.8rem; display: none;">Invalid Key.</p>
+        </div>
+
+        <!-- Settings Modal -->
+        <div id="settings-modal" style="display:none; position: fixed; top: 30%; left: 50%; transform: translateX(-50%); background: var(--bg-color); border: 1px solid var(--ui-blue); padding: 30px; border-radius: 8px; z-index: 1005; box-shadow: 0 0 20px rgba(0,0,0,0.8); text-align: center; width: 350px;">
+            <h3 style="color: var(--ui-blue); font-family: var(--font-head); margin-top:0; border-bottom: 1px solid var(--ui-blue); padding-bottom: 10px;">User Settings</h3>
+            <p>Change Account Password:</p>
+            <input type="password" id="new-password" placeholder="New Password" style="padding: 10px; width: 80%; margin-bottom: 10px; background: #000; color: var(--safe-color); border: 1px solid var(--ui-blue);">
+            <input type="password" id="confirm-password" placeholder="Confirm Password" style="padding: 10px; width: 80%; margin-bottom: 15px; background: #000; color: var(--safe-color); border: 1px solid var(--ui-blue);">
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="save-password-btn" style="padding: 10px; background: var(--safe-color); color: #000; font-weight: bold; border: none; cursor: pointer; flex: 1;">Save</button>
+                <button onclick="closeSettings()" style="padding: 10px; background: transparent; color: #fff; border: 1px solid #777; cursor: pointer; flex: 1;">Cancel</button>
+            </div>
+            <p id="settings-msg" style="color: var(--safe-color); font-size: 0.85rem; display: none; margin-top: 15px;">Password changed successfully.</p>
+        </div>
+    </div>
+
+    <!-- 3. Security Checkpoint Overlay -->
+    <div id="intercept-overlay">
+        <div class="spinner" id="intercept-spinner"></div>
+        <div class="status-message" id="intercept-msg">Security Checkpoint</div>
+        <div class="status-sub" id="intercept-sub">Awaiting standard network authorization.</div>
+    </div>
+
+    <!-- 4. Access Denied / Terminated Terminal -->
+    <div id="denied-screen" class="access-denied-screen">
+        <h1>ACCESS DENIED</h1>
+        <p id="denied-reason">Security clearance revoked.</p>
+    </div>
+
+    <!-- 5. Ransomware Style Anomaly Lockout -->
+    <div id="ransomware-screen" class="ransomware-screen">
+        <div class="ransomware-box glitch">
+            <h1>SYSTEM LOCKED</h1>
+            <h2 style="color: var(--alert-color);">BEHAVIORAL ANOMALY DETECTED</h2>
+            <p>Your biometric interaction pattern (typing cadence / cursor velocity) does not match the authenticated user profile.</p>
+            <p><strong>Reason:</strong> <span id="ransomware-reason">Processing...</span></p>
+            <p style="margin-top:20px; font-size: 0.9rem; color:#aaa;">This incident has been reported to the Security Operations Center. All files are encrypted and network access is suspended.</p>
+            <p style="margin-top:20px; font-size: 1.1rem; color: var(--safe-color);" class="blink">Awaiting Administrator Permission to restore session...</p>
+        </div>
+    </div>
+
+    <!-- Hidden Video element for capture -->
+    <video id="webcam" autoplay playsinline style="display:none;"></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <script src="/app.js"></script>
+    <script src="/tracker.js"></script>
+</body>
+</html>
