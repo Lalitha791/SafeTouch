@@ -1,0 +1,66 @@
+Here is a comprehensive Brand Guidelines document for your Behavioral Biometrics & Zero-Trust System.
+
+1. Brand Identity & Naming
+Brand Personality: Vigilant, Invisible, Seamless, and Authoritative.
+
+Mission Statement: "To provide frictionless, zero-trust security that protects systems through natural human behavior."
+
+Potential Names:
+
+SECURE TOUCH: Focuses on the physical movement (keystrokes, mouse velocity).
+
+Aegis Flow: "Aegis" implies a protective shield; "Flow" highlights the continuous, uninterrupted nature of the tracking.
+
+Sentira: A blend of "Sentinel" (guard) and "Persona" (identity).
+
+2. Color Palette Directions
+Here are two distinct visual directions. The first is a classic enterprise security standard, and the second offers a more stylized, vintage computing aesthetic.
+
+Direction A: Modern Enterprise (Sleek & Trustworthy)
+
+Primary Background: Deep Navy or Charcoal (#0B132B) – Reduces eye strain for admins staring at dashboards and feels premium.
+
+Primary Accent (Safe/Allow): Cyber Green (#00FA9A) – Used for "Access Granted," baseline matches, and normal status.
+
+Alert Accent (Deny/Lock): Crimson Red (#FF3366) – Used for "Suspicious Activity," anomalies, and the blur-screen lockouts.
+
+UI Elements: Ice Blue (#4A90E2) – For borders, data graphs, and standard buttons.
+
+Direction B: The Retro-Terminal (Tactical & Nostalgic)
+
+Primary Background: Pure Black (#000000).
+
+Primary Text/Lines: Amber (#FFB000) or Terminal Green (#39FF14) – Evokes a retro-vintage, low-level mainframe aesthetic that perfectly fits a hardcore "Zero-Trust" cybersecurity vibe.
+
+Alerts: High-Contrast White or Flashing Red.
+
+Styling: Sharp edges, visible grid backgrounds, and zero drop-shadows.
+
+3. Typography
+To maintain a highly technical and legible interface, stick to a two-font system:
+
+Headings & Dashboard Metrics: Rajdhani or Space Grotesk. These have a slightly squared-off, geometric feel that looks highly advanced.
+
+Body Text & Security Logs: Roboto Mono or Fira Code. A monospaced font is absolutely essential for a security dashboard. It ensures that IP addresses, exact timestamps, and WPM (Words Per Minute) metrics align perfectly in vertical columns.
+
+4. Logo Concepts
+Concept 1 (The Circuit-Print): A stylized fingerprint where the ridges are actually continuous, flowing digital circuit lines—representing behavioral data rather than physical biology.
+
+Concept 2 (The Shielded Node): A minimalist computer mouse icon enclosed within a geometric shield, representing the protection of hardware interactions.
+
+Concept 3 (The Organic Wave): A smooth, continuous watercolor-style brush stroke that sharply morphs into a hard, digital step-graph, symbolizing the translation of fluid human behavior into strict, secure data points.
+
+5. Voice and Tone (UI Copy)
+The way the application "speaks" through text should be highly professional, concise, and calm to prevent user panic.
+
+For the Locked User (The Intercept Screen): Do not use alarming language.
+
+Avoid: "WARNING: YOU ARE LOCKED OUT. WAITING FOR ADMIN."
+
+Use: "Security Checkpoint. Awaiting standard network authorization."
+
+For the Admin Dashboard: Be precise, objective, and data-driven.
+
+Avoid: "User behavior looks weird!"
+
+Use: "Anomaly Detected: Keystroke cadence deviated by 34% from established baseline."
