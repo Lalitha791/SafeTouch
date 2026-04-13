@@ -6,6 +6,14 @@ const path = require('path');
 const cors = require('cors');
 const behaviorRouter = require('./behavior');
 
+process.on('uncaughtException', err => {
+    console.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', reason => {
+    console.error('Unhandled Rejection:', reason);
+});
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
