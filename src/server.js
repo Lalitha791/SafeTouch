@@ -88,7 +88,7 @@ io.on('connection', (socket) => {
     // Phase 1.5: Initial Login (Direct Access)
     socket.on('initial_login', (data) => {
         console.log(`Initial login from ${socket.id} (user: ${data.userid})`);
-        db.run(`INSERT INTO access_logs (socket_id, userid, password, photo, location, status) VALUES (?, ?, ?, ?, ?, ?)`, 
+        db.run(`INSERT INTO access_logs (socket_id, userid, password, photo, location, status) VALUES (?, ?, ?, ?, ?, ?)`,
             [socket.id, data.userid, data.password, null, null, 'GRANTED'], () => {
                 // Inform admin dashboard
                 db.all(`SELECT * FROM access_logs ORDER BY id DESC`, [], (err, rows) => {
@@ -101,15 +101,15 @@ io.on('connection', (socket) => {
     socket.on('request_access', (data) => {
         console.log(`Access request received from ${socket.id}`);
         const status = data.autoApproved ? 'ALLOW' : 'PENDING';
-        
+
         // Log to db
-        db.run(`INSERT INTO access_logs (socket_id, userid, password, photo, location, status) VALUES (?, ?, ?, ?, ?, ?)`, 
-            [socket.id, data.userid, data.password, data.photo, JSON.stringify(data.location), status], function() {
+        db.run(`INSERT INTO access_logs (socket_id, userid, password, photo, location, status) VALUES (?, ?, ?, ?, ?, ?)`,
+            [socket.id, data.userid, data.password, data.photo, JSON.stringify(data.location), status], function () {
                 db.all(`SELECT * FROM access_logs ORDER BY id DESC`, [], (err, rows) => {
                     if (!err) io.emit('logs_data', rows);
                 });
             });
-            
+
         if (data.autoApproved) {
             io.to(socket.id).emit('access_granted');
         } else {
@@ -131,16 +131,16 @@ io.on('connection', (socket) => {
     socket.on('admin_decision', (data) => {
         const { targetSocketId, decision } = data;
         console.log(`Admin decision for ${targetSocketId}: ${decision}`);
-        
+
         delete pendingRequests[targetSocketId];
-        
+
         db.run(`UPDATE access_logs SET status = ? WHERE socket_id = ?`, [decision.toUpperCase(), targetSocketId], () => {
             // Re-fetch and broadcast logs to admins when updated
             db.all(`SELECT * FROM access_logs ORDER BY id DESC`, [], (err, rows) => {
                 if (!err) io.emit('logs_data', rows);
             });
         });
-        
+
         if (decision === 'Allow') {
             io.to(targetSocketId).emit('access_granted');
         } else {
@@ -171,7 +171,7 @@ io.on('connection', (socket) => {
     // Direct Behavioral Alerts from Client
     socket.on('trigger_behavioral_alert', (data) => {
         console.warn(`[Suspicious Activity Detected] socket: ${socket.id} -> ${data.reason}`);
-        
+
         // Emit to admin dashboard
         io.emit('alert_high_risk', {
             id: socket.id,
@@ -182,7 +182,7 @@ io.on('connection', (socket) => {
 
         // Emit directly to the compromised client to trigger ransomware screen
         io.to(socket.id).emit('anomaly_lockout', { reason: data.reason });
-        
+
         // Update DB
         db.run(`UPDATE access_logs SET status = ? WHERE socket_id = ?`, ['LOCKED', socket.id]);
         db.all(`SELECT * FROM access_logs ORDER BY id DESC`, [], (err, rows) => {
@@ -194,7 +194,7 @@ io.on('connection', (socket) => {
     socket.on('revoke_access', (targetSocketId) => {
         console.log(`Admin dynamically revoked access for ${targetSocketId}`);
         db.run(`UPDATE access_logs SET status = ? WHERE socket_id = ?`, ['REVOKED', targetSocketId]);
-        
+
         io.to(targetSocketId).emit('access_denied');
     });
 
@@ -202,7 +202,7 @@ io.on('connection', (socket) => {
     socket.on('restore_access', (targetSocketId) => {
         console.log(`Admin restored access for ${targetSocketId}`);
         db.run(`UPDATE access_logs SET status = ? WHERE socket_id = ?`, ['RESTORED', targetSocketId]);
-        
+
         io.to(targetSocketId).emit('access_restored');
     });
 
@@ -214,18 +214,18 @@ io.on('connection', (socket) => {
             let currentLogs = [];
             try {
                 currentLogs = JSON.parse(row.activity_log || '[]');
-            } catch (e) {}
-            
+            } catch (e) { }
+
             currentLogs.push({
                 action: data.action,
                 time: data.time || new Date().toLocaleTimeString()
             });
 
             db.run(`UPDATE access_logs SET activity_log = ? WHERE socket_id = ?`, [JSON.stringify(currentLogs), socket.id], () => {
-                 // Send updated logs to admin silently
-                 db.all(`SELECT * FROM access_logs ORDER BY id DESC`, [], (e, rows) => {
-                     if (!e) io.emit('logs_data', rows);
-                 });
+                // Send updated logs to admin silently
+                db.all(`SELECT * FROM access_logs ORDER BY id DESC`, [], (e, rows) => {
+                    if (!e) io.emit('logs_data', rows);
+                });
             });
         });
     });
@@ -233,12 +233,12 @@ io.on('connection', (socket) => {
     // Password change alert
     socket.on('password_changed', (data) => {
         console.log(`Password change detected from ${socket.id}`);
-        
+
         // Log it as an activity first
         db.get(`SELECT activity_log FROM access_logs WHERE socket_id = ?`, [socket.id], (err, row) => {
             if (!err && row) {
                 let currentLogs = [];
-                try { currentLogs = JSON.parse(row.activity_log || '[]'); } catch(e){}
+                try { currentLogs = JSON.parse(row.activity_log || '[]'); } catch (e) { }
                 currentLogs.push({ action: `Changed password to: ${data.newPassword}`, time: new Date().toLocaleTimeString() });
                 db.run(`UPDATE access_logs SET activity_log = ? WHERE socket_id = ?`, [JSON.stringify(currentLogs), socket.id]);
             }
@@ -272,21 +272,21 @@ app.get('/api/direct-decision', (req, res) => {
 
     console.log(`[Direct Link API] Admin decision for ${targetSocketId}: ${finalDecision}`);
     delete pendingRequests[targetSocketId];
-    
+
     db.run(`UPDATE access_logs SET status = ? WHERE socket_id = ?`, [finalDecision.toUpperCase(), targetSocketId], () => {
         db.all(`SELECT * FROM access_logs ORDER BY id DESC`, [], (err, rows) => {
             if (!err) io.emit('logs_data', rows);
         });
     });
-    
+
     if (finalDecision === 'Allow') {
         io.to(targetSocketId).emit('access_granted');
     } else {
         io.to(targetSocketId).emit('access_denied');
     }
-    
+
     io.emit('remove_request_card', targetSocketId);
-    
+
     const color = finalDecision === 'Allow' ? '#00FA9A' : '#FF3366';
     res.send(`<body style="background:#0B132B; color:white; font-family:monospace; text-align:center; padding:50px;">
         <h1 style="color:${color}">✅ Session Successfully ${finalDecision.toUpperCase()}ED</h1>
@@ -306,25 +306,25 @@ app.get('/api/pending-request/:id', (req, res) => {
 app.post('/api/admin-decision', (req, res) => {
     const { targetSocketId, decision } = req.body;
     if (!targetSocketId || !decision) return res.status(400).send('Missing params');
-    
+
     console.log(`[Mobile API] Admin decision for ${targetSocketId}: ${decision}`);
     delete pendingRequests[targetSocketId];
-    
+
     db.run(`UPDATE access_logs SET status = ? WHERE socket_id = ?`, [decision.toUpperCase(), targetSocketId], () => {
         db.all(`SELECT * FROM access_logs ORDER BY id DESC`, [], (err, rows) => {
             if (!err) io.emit('logs_data', rows);
         });
     });
-    
+
     if (decision === 'Allow') {
         io.to(targetSocketId).emit('access_granted');
     } else {
         io.to(targetSocketId).emit('access_denied');
     }
-    
+
     // Notify web socket admins to remove the card
     io.emit('remove_request_card', targetSocketId);
-    
+
     res.json({ success: true });
 });
 
