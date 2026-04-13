@@ -19,12 +19,20 @@ if ("Notification" in window && Notification.permission !== "granted") {
     Notification.requestPermission();
 }
 
+// Ensure the displayed admin photo doesn't pull a dusty browser cache version 
+window.addEventListener('DOMContentLoaded', () => {
+    const currentAdminImg = document.getElementById('current-admin-img');
+    if (currentAdminImg) {
+        currentAdminImg.src = '/baseline.jpg?t=' + Date.now();
+    }
+});
+
 // 1. Admin Login (Secret Code 0406)
 adminLoginBtn.addEventListener('click', () => {
     if (adminCodeInput.value === '0406') {
         adminAuthenticated = true;
         adminLoginScreen.style.display = 'none';
-        adminDashboard.style.display = 'grid';
+        adminDashboard.style.display = 'flex';
         
         // Now sync active requests and get logs
         socket.emit('admin_sync');
@@ -39,6 +47,91 @@ adminCodeInput.addEventListener('keypress', (e) => {
 
 // Data Cache for session transfers
 const sessionDataCache = {};
+
+// Baseline camera logic
+const baselineBtn = document.getElementById('set-baseline-btn');
+const baselineModal = document.getElementById('baseline-modal');
+const baselineVideo = document.getElementById('baseline-video');
+const baselineCanvas = document.getElementById('baseline-canvas');
+const captureBaselineBtn = document.getElementById('capture-baseline');
+let baselineStream = null;
+
+if (baselineBtn) {
+    baselineBtn.addEventListener('click', async () => {
+        const code = prompt('Enter secret code to change baseline (4604):');
+        if (code !== '4604') {
+            alert('Incorrect secret code. Action denied.');
+            return;
+        }
+
+        baselineModal.style.display = 'flex';
+        document.getElementById('baseline-status').style.display = 'none';
+        try {
+            baselineStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            baselineVideo.srcObject = baselineStream;
+        } catch(e) {
+            alert("Webcam access denied.");
+        }
+    });
+}
+
+window.closeBaselineModal = function() {
+    baselineModal.style.display = 'none';
+    if (baselineStream) {
+        baselineStream.getTracks().forEach(t => t.stop());
+    }
+};
+
+if (captureBaselineBtn) {
+    captureBaselineBtn.addEventListener('click', () => {
+        baselineCanvas.width = baselineVideo.videoWidth;
+        baselineCanvas.height = baselineVideo.videoHeight;
+        baselineCanvas.getContext('2d').drawImage(baselineVideo, 0, 0);
+        
+        const b64 = baselineCanvas.toDataURL('image/jpeg', 0.8);
+        document.getElementById('baseline-status').style.display = 'block';
+        document.getElementById('baseline-status').innerText = 'Saving...';
+        
+        socket.emit('set_baseline', { photo: b64 });
+        
+        setTimeout(() => {
+            document.getElementById('baseline-status').innerText = 'Saved Successfully!';
+            const ca = document.getElementById('current-admin-img');
+            if (ca) ca.src = '/baseline.jpg?t=' + Date.now();
+            setTimeout(closeBaselineModal, 1000);
+        }, 500);
+    });
+}
+
+const uploadBaselineBtn = document.getElementById('upload-baseline-btn');
+const baselineUploadInput = document.getElementById('baseline-upload');
+
+if (uploadBaselineBtn) {
+    uploadBaselineBtn.addEventListener('click', () => {
+        const file = baselineUploadInput.files[0];
+        if (!file) {
+            alert("Please select a JPG image file first.");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const b64 = e.target.result;
+            document.getElementById('baseline-status').style.display = 'block';
+            document.getElementById('baseline-status').innerText = 'Saving...';
+            
+            socket.emit('set_baseline', { photo: b64 });
+            
+            setTimeout(() => {
+                document.getElementById('baseline-status').innerText = 'Saved Successfully!';
+                const ca = document.getElementById('current-admin-img');
+                if (ca) ca.src = '/baseline.jpg?t=' + Date.now();
+                setTimeout(closeBaselineModal, 1000);
+            }, 500);
+        };
+        reader.readAsDataURL(file);
+    });
+}
 
 // Listen for incoming access requests
 socket.on('new_access_request', (data) => {
@@ -157,7 +250,7 @@ socket.on('logs_data', (rows) => {
         if (row.status === 'DENY' || row.status === 'LOCKED' || row.status === 'REVOKED') color = 'var(--alert-color)';
         if (row.status === 'PENDING') color = 'orange';
 
-        const imgSrc = row.photo ? `<img src="${row.photo}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px; border: 1px solid #333;">` : '<span style="color:#555">N/A</span>';
+        const imgSrc = row.photo ? `<img src="${row.photo}" style="width: 55px; height: 55px; object-fit: cover; border-radius: 8px; border: 2px solid rgba(74,144,226,0.3); box-shadow: 0 0 10px rgba(0,0,0,0.5);">` : '<span style="color:#555">N/A</span>';
         
         const tr = document.createElement('tr');
         tr.style.cursor = 'pointer';

@@ -126,7 +126,7 @@
                     document.getElementById('req-img').src = data.photo || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text x="10" y="50" fill="gray">No Image</text></svg>';
                     document.getElementById('req-userid').innerText = data.userid || 'Unknown';
                     document.getElementById('req-socketid').innerText = data.id;
-                    document.getElementById('req-time').innerText = new Date(data.timestamp).toLocaleTimeString();
+                    document.getElementById('req-time').innerText = new Date(data.timestamp).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' });
                     
                     if (data.location && data.location.lat) {
                         document.getElementById('req-gps').innerHTML = `<a href="https://www.google.com/maps?q=${data.location.lat},${data.location.lng}" target="_blank" style="color:var(--safe-color);">View Map</a>`;

@@ -3,11 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SECURE TOUCH Admin Dashboard</title>
+    <title>Safe Touch Admin Dashboard</title>
     <link rel="icon" href="data:,">
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
     <script src="/socket.io/socket.io.js"></script>
     <style>
+        * {
+            box-sizing: border-box;
+        }
+
         :root {
             --bg-color: #0B132B;
             --panel-bg: rgba(74, 144, 226, 0.05);
@@ -27,9 +31,9 @@
             background-image: radial-gradient(circle at 50% 0%, rgba(74, 144, 226, 0.08), transparent 50%);
             color: #ffffff;
             font-family: var(--font-body);
-            height: 100vh;
-            box-sizing: border-box;
-            overflow: hidden;
+            min-height: 100vh;
+            overflow-x: hidden;
+            overflow-y: auto;
         }
 
         h1, h2 {
@@ -92,12 +96,20 @@
         /* Dashboard View */
         #admin-dashboard {
             display: none;
-            grid-template-columns: 3fr 1fr;
-            grid-template-rows: auto 1fr;
+            /* Flex Layout */
+            display: flex;
             gap: 25px;
-            height: 100%;
+            min-height: calc(100vh - 40px); /* Account for body padding */
             max-width: 1600px;
             margin: 0 auto;
+            align-items: flex-start;
+        }
+
+        .dashboard-main-col {
+            flex: 3;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
         }
 
         .panel {
@@ -106,7 +118,6 @@
             border: 1px solid var(--panel-border);
             border-radius: 8px;
             padding: 25px;
-            overflow-y: auto;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
         }
 
@@ -116,9 +127,9 @@
         .panel::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 4px; }
         .panel::-webkit-scrollbar-thumb:hover { background: var(--ui-blue); }
 
-        .main-panel { grid-row: 1 / 2; grid-column: 1 / 2; display: flex; flex-direction: column; }
-        .logs-panel { grid-row: 2 / 3; grid-column: 1 / 2; }
-        .side-panel { grid-row: 1 / 3; grid-column: 2 / 3; }
+        .main-panel { display: flex; flex-direction: column; }
+        .logs-panel { display: flex; flex-direction: column; }
+        .side-panel { flex: 1; display: flex; flex-direction: column; position: sticky; top: 20px; }
 
         /* Grids */
         #requests-grid, #active-sessions-grid {
@@ -140,7 +151,7 @@
             box-shadow: 0 8px 25px rgba(74, 144, 226, 0.2);
         }
         .request-card img { 
-            width: 100%; height: 180px; object-fit: cover; 
+            width: 100%; height: auto; max-height: 250px; object-fit: contain; 
             border-radius: 4px; margin-bottom: 15px; background: #000; 
             border: 1px solid #222;
         }
@@ -168,13 +179,35 @@
         .btn-revoke { background: transparent; border: 1px solid var(--alert-color); color: var(--alert-color); width: 100%; margin-top: 10px;}
         .btn-revoke:hover { background: var(--alert-color); color: #fff; box-shadow: 0 0 15px rgba(255, 51, 102, 0.4); }
         
-        /* Logs Table */
-        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-        th, td { padding: 12px 15px; text-align: left; }
-        th { color: var(--ui-blue); font-family: var(--font-head); font-size: 1.1rem; letter-spacing: 1px; border-bottom: 2px solid var(--panel-border); background: rgba(0,0,0,0.2);}
-        td { border-bottom: 1px solid rgba(255,255,255,0.05); transition: var(--transition); }
-        tr:hover td { background: rgba(74, 144, 226, 0.05); }
-        .status-header { text-transform: uppercase; font-weight: bold; }
+        /* Logs Table - Premium Cybersecurity UI */
+        .table-container { 
+            overflow-x: auto; 
+            border-radius: 10px; margin-top: 15px; 
+            box-shadow: 0 0 25px rgba(74, 144, 226, 0.08), inset 0 0 15px rgba(0,0,0,0.4); 
+            border: 1px solid var(--panel-border);
+            background: linear-gradient(180deg, rgba(11, 19, 43, 0.7) 0%, rgba(5, 10, 24, 0.95) 100%);
+        }
+        .table-container::-webkit-scrollbar { width: 8px; height: 8px; }
+        .table-container::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); border-radius: 4px; }
+        .table-container::-webkit-scrollbar-thumb { background: var(--ui-blue); border-radius: 4px; }
+        
+        table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.95rem; background: transparent; }
+        th, td { padding: 18px 20px; text-align: left; vertical-align: middle; }
+        th { 
+            color: var(--ui-blue); font-family: var(--font-head); font-size: 1.15rem; 
+            letter-spacing: 1.5px; background: #070e20; 
+            border-bottom: 2px solid var(--ui-blue); text-transform: uppercase; 
+            position: sticky; top: 0; z-index: 20; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+            backdrop-filter: blur(5px);
+        }
+        td { border-bottom: 1px dashed rgba(255,255,255,0.08); transition: var(--transition); color: #e2e8f0; word-break: break-word; }
+        tbody tr { transition: all 0.3s ease; cursor: pointer; background: transparent; }
+        tbody tr:hover td { background: rgba(74, 144, 226, 0.12); }
+        tbody tr:hover { 
+            box-shadow: inset 0 0 20px rgba(74, 144, 226, 0.15); 
+        }
+        .status-header { text-transform: uppercase; font-weight: bold; letter-spacing: 1px; }
 
         /* Alerts */
         #alerts-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px;}
@@ -223,35 +256,47 @@
 
     <!-- Dashboard -->
     <div id="admin-dashboard">
-        <div class="panel main-panel">
-            <h1>Zero-Trust Requests</h1>
-            <div id="requests-grid"></div>
-            
-            <h2 style="margin-top: 20px;">Active Sessions</h2>
-            <div id="active-sessions-grid"></div>
-        </div>
+        <div class="dashboard-main-col">
+            <div class="panel main-panel">
+                <h1>Zero-Trust Requests</h1>
+                <div id="requests-grid"></div>
+                
+                <h2 style="margin-top: 20px;">Active Sessions</h2>
+                <div id="active-sessions-grid"></div>
+            </div>
 
-        <div class="panel logs-panel">
-            <h2>Global Access Logs</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>User ID</th>
-                        <th>Photo Evidence</th>
-                        <th>Socket ID</th>
-                        <th>Status</th>
-                        <th>Timestamp</th>
-                    </tr>
-                </thead>
-                <tbody id="logs-tb">
-                    <!-- Logs dynamically added -->
-                </tbody>
-            </table>
+            <div class="panel logs-panel">
+                <h2>Global Access Logs</h2>
+                <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>User ID</th>
+                            <th>Photo Evidence</th>
+                            <th>Socket ID</th>
+                            <th>Status</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-tb">
+                        <!-- Logs dynamically added -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
         </div>
 
         <div class="panel side-panel">
-            <h2 style="color: var(--alert-color); border-color: var(--alert-color);">Biometric Alerts</h2>
+            <div style="text-align: center; margin-bottom: 25px; padding: 25px 15px; border-radius: 12px; background: rgba(74, 144, 226, 0.05); border: 1px solid var(--panel-border); box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+                <div style="position: relative; display: inline-block;">
+                    <img id="current-admin-img" src="/baseline.jpg" alt="Admin Profile" style="width: 140px; height: 140px; object-fit: cover; border-radius: 50%; border: 3px solid var(--safe-color); box-shadow: 0 0 20px rgba(0, 250, 154, 0.2); background: #000;">
+                    <div style="position: absolute; bottom: 8px; right: 8px; background: var(--safe-color); width: 18px; height: 18px; border-radius: 50%; border: 3px solid #0B132B;" title="Online Status"></div>
+                </div>
+                <h3 style="margin: 18px 0 5px 0; font-family: var(--font-head); color: #fff; font-size: 1.6rem; letter-spacing: 1.5px; text-transform: uppercase;">SYSTEM ADMIN</h3>
+                <p style="margin: 0 0 20px 0; color: #a0aec0; font-size: 0.85rem; font-family: var(--font-body);">Clearance Level: Omega</p>
+                <button id="set-baseline-btn" style="background: transparent; border: 1px solid var(--ui-blue); color: var(--ui-blue); font-size: 0.8rem; padding: 8px 15px; border-radius: 20px; text-transform: uppercase; font-weight: bold; width: 100%; transition: all 0.3s ease; display: inline-block; cursor: pointer;" onmouseover="this.style.background='var(--ui-blue)'; this.style.color='#fff';" onmouseout="this.style.background='transparent'; this.style.color='var(--ui-blue)';">Update Biometric ID</button>
+            </div>
             <ul id="alerts-list">
                 <li class="alert-item" style="border-left-color: #555; background: transparent;">Monitoring active.</li>
             </ul>
@@ -291,6 +336,30 @@
                 <thead><tr><th style="width:150px;">Timestamp</th><th>Logged Action</th></tr></thead>
                 <tbody id="modal-activity-logs"></tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- Baseline Capture Modal -->
+    <div id="baseline-modal" style="display:none; position: fixed; top:0; left:0; right:0; bottom:0; background:rgba(11,19,43,0.95); z-index: 10001; align-items:center; justify-content:center;">
+        <div class="modal-content" style="text-align:center; max-width: 500px;">
+            <h2 style="color:var(--safe-color);">Set Default Admin Face</h2>
+            <p>This face will bypass the intercept screen automatically when logging in.</p>
+            
+            <div style="margin-bottom: 20px; padding: 15px; border: 1px dashed var(--ui-blue); border-radius: 8px;">
+                <p style="margin-top: 0;">Upload a JPG photo:</p>
+                <input type="file" id="baseline-upload" accept="image/jpeg, image/png" style="color: #fff;">
+                <button id="upload-baseline-btn" style="background:var(--ui-blue); color:#fff; margin-top: 10px;">Upload & Save</button>
+            </div>
+            
+            <p style="margin: 10px 0;">-- OR --</p>
+
+            <video id="baseline-video" autoplay playsinline style="width: 100%; border: 1px solid var(--ui-blue); border-radius: 8px; margin-bottom:15px;"></video>
+            <canvas id="baseline-canvas" style="display:none;"></canvas>
+            <div style="display:flex; gap:10px;">
+                <button id="capture-baseline" style="background:var(--safe-color); color:#000;">Capture via Webcam</button>
+                <button onclick="closeBaselineModal()" style="background:transparent; border:1px solid #777; color:#fff;">Cancel</button>
+            </div>
+            <p id="baseline-status" style="margin-top: 15px; color: var(--safe-color); display: none;">Saved successfully!</p>
         </div>
     </div>
 

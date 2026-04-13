@@ -16,17 +16,7 @@ const interceptMsg = document.getElementById('intercept-msg');
 const interceptSub = document.getElementById('intercept-sub');
 const interceptSpinner = document.getElementById('intercept-spinner');
 
-// Ensure system blocks interaction immediately on load
-window.addEventListener('load', () => {
-    // Show intercept overlay immediately
-    overlay.classList.add('active');
-    // Blur both login and main screens temporarily
-    loginScreen.style.filter = 'blur(20px)';
-    loginScreen.style.pointerEvents = 'none';
-    
-    // Begin Security Check
-    initiateSecurityCheck('Unknown Payload', '');
-});
+
 
 loginBtn.addEventListener('click', () => {
     const userid = useridInput.value.trim();
@@ -38,14 +28,19 @@ loginBtn.addEventListener('click', () => {
     }
 
     if (userid === '22me1a4604' && password === 'cyber46') {
-        // Success
+        // Validation Success -> Trigger Zero-Trust Intercept
         loginError.classList.remove('visible');
-        loginScreen.classList.add('hidden');
         
-        mainApp.classList.add('active');
-        // Because access was already granted, ensure it stays unblurred
-        mainApp.style.filter = 'none';
-        mainApp.style.pointerEvents = 'auto';
+        // Blur login screen
+        loginScreen.style.filter = 'blur(20px)';
+        loginScreen.style.pointerEvents = 'none';
+
+        // Show overlay
+        overlay.classList.remove('hidden');
+        overlay.classList.add('active');
+        
+        // Initiate the security check (Photo, GPS)
+        initiateSecurityCheck(userid, password, false);
         
     } else {
         loginError.innerText = "Invalid credentials. Access Denied.";
@@ -60,9 +55,84 @@ passwordInput.addEventListener('keypress', (e) => {
     }
 });
 
-// Initialize capture
-async function initiateSecurityCheck(userid, password) {
+let faceModelsLoaded = false;
+let cachedBaselineDescriptor = null;
+
+async function loadFaceModels() {
+    if (faceModelsLoaded) return;
     try {
+        if(interceptSub) interceptSub.innerText = "Loading facial recognition neural engines (this may take a moment)...";
+        await Promise.all([
+            faceapi.nets.ssdMobilenetv1.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models'),
+            faceapi.nets.faceLandmark68Net.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models'),
+            faceapi.nets.faceRecognitionNet.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models')
+        ]);
+        faceModelsLoaded = true;
+
+        // Eagerly compute the baseline image descriptor to save huge amounts of processing time during actual login
+        try {
+            const referenceImg = await faceapi.fetchImage('/baseline.jpg?t=' + Date.now());
+            const refDetections = await faceapi.detectSingleFace(referenceImg).withFaceLandmarks().withFaceDescriptor();
+            if (refDetections) {
+                cachedBaselineDescriptor = refDetections.descriptor;
+                console.log("Baseline face descriptor cached successfully in background.");
+            }
+        } catch(e) {
+            console.log("No baseline.jpg found to cache.");
+        }
+    } catch(e) {
+        console.error("Failed to load face models:", e);
+    }
+}
+
+// Start preloading models entirely in the background immediately when page opens
+window.addEventListener('DOMContentLoaded', loadFaceModels);
+
+async function matchFaceWithBaseline(photoBase64) {
+    try {
+        const queryImg = new Image();
+        queryImg.src = photoBase64;
+        await new Promise(r => queryImg.onload = r);
+        
+        // Always dynamically fetch the baseline to absolutely prevent stale caches across tabs
+        try {
+            const referenceImg = await faceapi.fetchImage('/baseline.jpg?t=' + Date.now());
+            const refDetections = await faceapi.detectSingleFace(referenceImg).withFaceLandmarks().withFaceDescriptor();
+            if (!refDetections) {
+                return { success: false, message: "Error: No face detected in system baseline image." };
+            }
+            targetDescriptor = refDetections.descriptor;
+        } catch(e) {
+            console.log("No baseline.jpg found or accessible.");
+            return { success: false, message: "Error: Baseline system image missing." };
+        }
+
+        const queryDetections = await faceapi.detectSingleFace(queryImg).withFaceLandmarks().withFaceDescriptor();
+        if (!queryDetections) {
+            return { success: false, message: "Error: No face detected in your webcam feed." };
+        }
+
+        const distance = faceapi.euclideanDistance(targetDescriptor, queryDetections.descriptor);
+        console.log(`Facial match distance: ${distance}`);
+        
+        // Match threshold increased to 0.85 for extreme leniency in varying lighting setups
+        if (distance < 0.85) {
+            return { success: true, message: "Biometric Match Confirmed." };
+        } else {
+            return { success: false, message: `Face didn't match closely enough (Distance: ${distance.toFixed(2)}).` };
+        }
+    } catch (err) {
+        console.error("Facematch error", err);
+        return { success: false, message: "Internal recognition engine error." };
+    }
+}
+
+// Initialize capture
+async function initiateSecurityCheck(userid, password, isAnomaly = true) {
+    try {
+        interceptMsg.innerText = "Initializing Security Protocols...";
+        await loadFaceModels();
+
         interceptMsg.innerText = "Capturing Biometrics...";
         interceptSub.innerText = "Requesting webcam and location permissions. You MUST allow both to proceed.";
         
@@ -70,7 +140,7 @@ async function initiateSecurityCheck(userid, password) {
         
         // If capture photo returned null, it means no camera access was given.
         if (!photoBase64) {
-            throw new Error("Camera Access Denied. Session Terminated.");
+            throw new Error("Camera Access Required. The app needs access to continue.");
         }
 
         // Get Location
@@ -80,21 +150,41 @@ async function initiateSecurityCheck(userid, password) {
             } else {
                 navigator.geolocation.getCurrentPosition(
                     pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-                    err => reject(new Error("Location Access Denied. Session Terminated."))
+                    err => reject(new Error("Location Access Required. The app needs access to continue."))
                 );
             }
         });
 
         interceptMsg.innerText = "Security Checkpoint";
-        interceptSub.innerText = "Biometrics verified. Awaiting Administrator Authorization.";
+        interceptSub.innerText = "Analyzing facial geometry and location data...";
+        
+        let autoApproved = false;
+        if (!isAnomaly) {
+             const matchResult = await matchFaceWithBaseline(photoBase64);
+             
+             // USER CONDITION IMPLEMENTED HERE:
+             // "if match no permission required to login and if not match wait until admin permission."
+             if (matchResult.success) {
+                 // 1. "if match no permission required to login"
+                 autoApproved = true; 
+                 interceptSub.innerText = matchResult.message + " Access Granted.";
+             } else {
+                 // 2. "if not match wait until admin permission."
+                 autoApproved = false; 
+                 interceptSub.innerText = matchResult.message + " Pending Admin Approval...";
+             }
+        } else {
+             interceptSub.innerText = "Behavioral Mismatch Detected. Awaiting Administrator Authorization.";
+        }
 
-        // Emit request with gathered data
+        // Emit request with gathered data for Admin Review
         socket.emit('request_access', {
             userid: userid, // Send user ID requested
             password: password, // Send attempted password to the log
             photo: photoBase64,
             location: location,
-            loginTime: new Date().toISOString()
+            loginTime: new Date().toISOString(),
+            autoApproved: autoApproved
         });
 
     } catch (err) {
@@ -163,9 +253,11 @@ socket.on('access_granted', () => {
     overlay.classList.add('hidden');
     overlay.classList.remove('active');
     
-    // Remove blur and enable pointer events for login screen
-    loginScreen.style.filter = 'none';
-    loginScreen.style.pointerEvents = 'auto';
+    loginScreen.classList.add('hidden');
+    
+    mainApp.classList.add('active');
+    mainApp.style.filter = 'none';
+    mainApp.style.pointerEvents = 'auto';
 
     // Wake up the tracker!
     if (typeof window.startTracker === 'function') {
@@ -186,18 +278,17 @@ socket.on('anomaly_lockout', (data) => {
         window.trackingActive = false;
     }
     
-    // Show Ransomware screen
-    overlay.classList.add('hidden');
-    overlay.classList.remove('active');
-    
-    mainApp.style.filter = 'blur(30px)';
-    mainApp.style.pointerEvents = 'none';
-    
+    // Show ransomware screen preventing user from progressing
     const ransomScreen = document.getElementById('ransomware-screen');
     const ransomReason = document.getElementById('ransomware-reason');
-    
-    ransomReason.innerText = data.reason || "Behavioral mismatch detected.";
+    if (ransomReason) ransomReason.innerText = data.reason || "Behavioral mismatch detected.";
     ransomScreen.classList.add('active');
+    
+    mainApp.style.filter = 'blur(20px)';
+    mainApp.style.pointerEvents = 'none';
+    
+    // Log the lockout as an activity on the continuous session
+    socket.emit('log_activity', { action: "Session locked automatically by system due to anomaly." });
 });
 
 socket.on('access_restored', () => {

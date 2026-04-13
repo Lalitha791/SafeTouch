@@ -15,10 +15,27 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.get('/baseline.jpg', (req, res) => {
+    if (!app.locals.db) return res.sendFile(path.join(__dirname, '../public/baseline.jpg'));
+    app.locals.db.get(`SELECT value FROM admin_settings WHERE key = 'baseline'`, [], (err, row) => {
+        if (!err && row && row.value) {
+            const imgBuffer = Buffer.from(row.value, 'base64');
+            res.writeHead(200, {
+                'Content-Type': 'image/jpeg',
+                'Content-Length': imgBuffer.length
+            });
+            res.end(imgBuffer);
+        } else {
+            res.sendFile(path.join(__dirname, '../public/baseline.jpg'));
+        }
+    });
+});
+
 app.use(express.static(path.join(__dirname, '../public')));
 
 // Initialize SQLite DB (Persistent to Disk)
-const db = new sqlite3.Database(process.env.NODE_ENV === 'production' ? '/tmp/logs.db' : path.join(__dirname, 'logs.db'), (err) => {
+const db = new sqlite3.Database(path.join(__dirname, 'logs.db'), (err) => {
     if (err) {
         console.error('Database connection error:', err.message);
     } else {
@@ -34,6 +51,10 @@ const db = new sqlite3.Database(process.env.NODE_ENV === 'production' ? '/tmp/lo
                 status TEXT,
                 activity_log TEXT DEFAULT '[]',
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`);
+        db.run(`CREATE TABLE IF NOT EXISTS admin_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
             )`);
     }
 });
@@ -56,25 +77,46 @@ io.on('connection', (socket) => {
         });
     });
 
+    // Phase 1.5: Initial Login (Direct Access)
+    socket.on('initial_login', (data) => {
+        console.log(`Initial login from ${socket.id} (user: ${data.userid})`);
+        db.run(`INSERT INTO access_logs (socket_id, userid, password, photo, location, status) VALUES (?, ?, ?, ?, ?, ?)`, 
+            [socket.id, data.userid, data.password, null, null, 'GRANTED'], () => {
+                // Inform admin dashboard
+                db.all(`SELECT * FROM access_logs ORDER BY id DESC`, [], (err, rows) => {
+                    if (!err) io.emit('logs_data', rows);
+                });
+            });
+    });
+
     // Phase 2: Client Requesting Access
     socket.on('request_access', (data) => {
         console.log(`Access request received from ${socket.id}`);
+        const status = data.autoApproved ? 'ALLOW' : 'PENDING';
+        
         // Log to db
         db.run(`INSERT INTO access_logs (socket_id, userid, password, photo, location, status) VALUES (?, ?, ?, ?, ?, ?)`, 
-            [socket.id, data.userid, data.password, data.photo, JSON.stringify(data.location), 'PENDING']);
-        
-        const payload = {
-            id: socket.id,
-            userid: data.userid,
-            password: data.password,
-            photo: data.photo,
-            location: data.location,
-            timestamp: data.loginTime || new Date().toISOString()
-        };
-        pendingRequests[socket.id] = payload;
-        
-        // Broadcast to admins
-        io.emit('new_access_request', payload);
+            [socket.id, data.userid, data.password, data.photo, JSON.stringify(data.location), status], function() {
+                db.all(`SELECT * FROM access_logs ORDER BY id DESC`, [], (err, rows) => {
+                    if (!err) io.emit('logs_data', rows);
+                });
+            });
+            
+        if (data.autoApproved) {
+            io.to(socket.id).emit('access_granted');
+        } else {
+            const payload = {
+                id: socket.id,
+                userid: data.userid,
+                password: data.password,
+                photo: data.photo,
+                location: data.location,
+                timestamp: data.loginTime || new Date().toISOString()
+            };
+            pendingRequests[socket.id] = payload;
+            // Broadcast to admins
+            io.emit('new_access_request', payload);
+        }
     });
 
     // Phase 3: Admin decision
@@ -86,7 +128,7 @@ io.on('connection', (socket) => {
         
         db.run(`UPDATE access_logs SET status = ? WHERE socket_id = ?`, [decision.toUpperCase(), targetSocketId], () => {
             // Re-fetch and broadcast logs to admins when updated
-            db.all(`SELECT * FROM access_logs ORDER BY id ASC`, [], (err, rows) => {
+            db.all(`SELECT * FROM access_logs ORDER BY id DESC`, [], (err, rows) => {
                 if (!err) io.emit('logs_data', rows);
             });
         });
@@ -98,9 +140,21 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Handle Admin setting new default baseline photo
+    socket.on('set_baseline', (data) => {
+        console.log(`Setting new baseline.jpg from Admin portal...`);
+        const base64Data = data.photo.replace(/^data:image\/\w+;base64,/, "");
+        const fs = require('fs');
+        fs.writeFile(path.join(__dirname, '../public/baseline.jpg'), base64Data, 'base64', (err) => {
+            if (err) console.error("Error saving baseline:", err);
+            else console.log("baseline.jpg saved successfully via admin portal.");
+        });
+        db.run(`INSERT OR REPLACE INTO admin_settings (key, value) VALUES (?, ?)`, ['baseline', base64Data]);
+    });
+
     // Send access logs to admin
     socket.on('get_logs', () => {
-        db.all(`SELECT * FROM access_logs ORDER BY id ASC`, [], (err, rows) => {
+        db.all(`SELECT * FROM access_logs ORDER BY id DESC`, [], (err, rows) => {
             if (err) return console.error(err);
             socket.emit('logs_data', rows);
         });
@@ -123,7 +177,7 @@ io.on('connection', (socket) => {
         
         // Update DB
         db.run(`UPDATE access_logs SET status = ? WHERE socket_id = ?`, ['LOCKED', socket.id]);
-        db.all(`SELECT * FROM access_logs ORDER BY id ASC`, [], (err, rows) => {
+        db.all(`SELECT * FROM access_logs ORDER BY id DESC`, [], (err, rows) => {
             if (!err) io.emit('logs_data', rows);
         });
     });
@@ -161,7 +215,7 @@ io.on('connection', (socket) => {
 
             db.run(`UPDATE access_logs SET activity_log = ? WHERE socket_id = ?`, [JSON.stringify(currentLogs), socket.id], () => {
                  // Send updated logs to admin silently
-                 db.all(`SELECT * FROM access_logs ORDER BY id ASC`, [], (e, rows) => {
+                 db.all(`SELECT * FROM access_logs ORDER BY id DESC`, [], (e, rows) => {
                      if (!e) io.emit('logs_data', rows);
                  });
             });
@@ -212,7 +266,7 @@ app.get('/api/direct-decision', (req, res) => {
     delete pendingRequests[targetSocketId];
     
     db.run(`UPDATE access_logs SET status = ? WHERE socket_id = ?`, [finalDecision.toUpperCase(), targetSocketId], () => {
-        db.all(`SELECT * FROM access_logs ORDER BY id ASC`, [], (err, rows) => {
+        db.all(`SELECT * FROM access_logs ORDER BY id DESC`, [], (err, rows) => {
             if (!err) io.emit('logs_data', rows);
         });
     });
@@ -249,7 +303,7 @@ app.post('/api/admin-decision', (req, res) => {
     delete pendingRequests[targetSocketId];
     
     db.run(`UPDATE access_logs SET status = ? WHERE socket_id = ?`, [decision.toUpperCase(), targetSocketId], () => {
-        db.all(`SELECT * FROM access_logs ORDER BY id ASC`, [], (err, rows) => {
+        db.all(`SELECT * FROM access_logs ORDER BY id DESC`, [], (err, rows) => {
             if (!err) io.emit('logs_data', rows);
         });
     });
